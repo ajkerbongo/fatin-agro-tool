@@ -224,7 +224,7 @@ app.get("/", (req, res) => {
         <div class="status">● MCP SERVER ONLINE</div>
         <h1>${SERVER_NAME}</h1>
         <p>Global Agricultural Expertise & Disease Detection</p>
-        <p>Endpoint: <code>/mcp</code></p>
+        <p>Endpoint: <code>/sse</code></p>
       </div>
     </body>
     </html>
@@ -239,7 +239,7 @@ app.get("/ping", (_req, res) => {
   res.status(200).send("pong");
 });
 
-app.post("/mcp", async (req, res) => {
+app.post("/sse", async (req, res) => {
   logRequest(req.body?.method || "unknown", req.body?.params);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
