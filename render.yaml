@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: fatin-agro-tool
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18 # Stable version for TF.js and MCP SDK
+      - key: PORT
+        fromPort: 3000
