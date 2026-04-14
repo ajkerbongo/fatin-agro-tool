@@ -7,5 +7,5 @@ build:
   command: npm run build
 
 startCommand:
-  type: sse
+  type: http
   command: node ./dist/index.js

@@ -26,16 +26,16 @@ const LABELS = [
   "Pepper,_bell___Bacterial_spot", "Pepper,_bell___healthy",
   "Potato___Early_blight", "Potato___Late_blight", "Potato___healthy",
   "Raspberry___healthy", "Soybean___healthy", "Squash___Powdery_mildew", "Strawberry___Leaf_scorch", "Strawberry___healthy",
-  "Tomato___Bacterial_spot", "Tomato___Early_blight", "Tomato___Late_blight", "Tomato___Leaf_Mold", "Tomato___ Septoria_leaf_spot", "Tomato___Spider_mites Two-spotted_spider_mite", "Tomato___Target_Spot", "Tomato___Tomato_Yellow_Leaf_Curl_Virus", "Tomato___Tomato_mosaic_virus", "Tomato___healthy"
+  "Tomato___Bacterial_spot", "Tomato___Early_blight", "Tomato___Late_blight", "Tomato___Leaf_Mold", "Tomato___Septoria_leaf_spot", "Tomato___Spider_mites Two-spotted_spider_mite", "Tomato___Target_Spot", "Tomato___Tomato_Yellow_Leaf_Curl_Virus", "Tomato___Tomato_mosaic_virus", "Tomato___healthy"
 ];
 
 let model: tf.LayersModel | null = null;
 
 async function loadModel() {
   try {
-    const fullPath = path.resolve("../model/model.json");
-    if (fs.existsSync(fullPath)) {
-      model = await tf.loadLayersModel(`file://${fullPath}`);
+    const modelPath = process.env.MODEL_PATH || path.join(process.cwd(), "model", "model.json");
+    if (fs.existsSync(modelPath)) {
+      model = await tf.loadLayersModel(`file://${modelPath}`);
       console.log(chalk.green("[MCP] Model loaded successfully from local storage."));
     } else {
       console.warn(chalk.yellow("[MCP] model/model.json not found. The tool will simulate detection until model files are provided."));
@@ -109,7 +109,8 @@ server.tool(
   "Lists all supported crops and common diseases.",
   {},
   async () => ({
-    content: [{ type: "text", text: JSON.stringify(SUPPORTED_CROPS, null, 2) }]
+    content: [{ type: "text", text: JSON.stringify(SUPPORTED_CROPS, null, 2) }],
+    structuredContent: SUPPORTED_CROPS
   })
 );
 
@@ -122,16 +123,19 @@ server.tool(
   async ({ image_base64 }) => {
     const buffer = Buffer.from(image_base64, "base64");
     if (!model) {
+      const simulatorResult = {
+        crop: "Simulator",
+        disease: "Healthy Leaf (Simulation)",
+        confidence: 0.99,
+        note: "Real Inference ready. Place model files in /model folder."
+      };
+
       return {
         content: [{
           type: "text",
-          text: JSON.stringify({
-            crop: "Simulator",
-            disease: "Healthy Leaf (Simulation)",
-            confidence: 0.99,
-            note: "Real Inference ready. Place model files in /model folder."
-          }, null, 2)
-        }]
+          text: JSON.stringify(simulatorResult, null, 2)
+        }],
+        structuredContent: simulatorResult
       };
     }
 
@@ -152,16 +156,22 @@ server.tool(
     const label = LABELS[maxIndex] || "Unknown Crop/Disease";
     const [crop, disease] = label.includes("___") ? label.split("___") : [label, "Unknown"];
 
+    // Clean up tensors to prevent memory leaks
+    tf.dispose([tensor, prediction]);
+
+    const result = {
+      crop: crop.replace(/_/g, " "),
+      disease: disease.replace(/_/g, " "),
+      confidence: scores[maxIndex],
+      status: "Real Inference"
+    };
+
     return {
       content: [{
         type: "text",
-        text: JSON.stringify({
-          crop: crop.replace(/_/g, " "),
-          disease: disease.replace(/_/g, " "),
-          confidence: scores[maxIndex],
-          status: "Real Inference"
-        }, null, 2)
-      }]
+        text: JSON.stringify(result, null, 2)
+      }],
+      structuredContent: result
     };
   }
 );
@@ -170,9 +180,9 @@ server.tool(
   "recommend_treatment",
   "Provides practical, organic, and low-cost agricultural advice.",
   {
-    crop: z.string(),
-    disease: z.string(),
-    location: z.string().optional(),
+    crop: z.string().describe("Name of the crop (e.g. Tomato, Potato, Apple)"),
+    disease: z.string().describe("Detected disease name"),
+    location: z.string().optional().describe("Optional geographic location for region-specific advice"),
   },
   async ({ crop, disease, location }) => {
     let organic = "Apply Neem oil solution (1-2 tsp per liter of water) or use a baking soda solution (1 tsp per liter) for fungal issues.";
@@ -182,15 +192,18 @@ server.tool(
       organic = "Remove and bury/burn infected material immediately. Use copper-based sprays (organic approved) as a last resort.";
     }
 
+    const recommendationResult = {
+      recommendation: `Treatment for ${disease} in ${crop} at ${location || 'Global Location'}.`,
+      measures: organic,
+      prevention: preventive,
+    };
+
     return {
       content: [{
         type: "text",
-        text: JSON.stringify({
-          recommendation: `Treatment for ${disease} in ${crop} at ${location || 'Global Location'}.`,
-          measures: organic,
-          prevention: preventive,
-        }, null, 2)
-      }]
+        text: JSON.stringify(recommendationResult, null, 2)
+      }],
+      structuredContent: recommendationResult
     };
   }
 );
@@ -224,7 +237,7 @@ app.get("/", (req, res) => {
         <div class="status">● MCP SERVER ONLINE</div>
         <h1>${SERVER_NAME}</h1>
         <p>Global Agricultural Expertise & Disease Detection</p>
-        <p>Endpoint: <code>/sse</code></p>
+        <p>Endpoint: <code>/mcp</code></p>
       </div>
     </body>
     </html>
@@ -239,18 +252,19 @@ app.get("/ping", (_req, res) => {
   res.status(200).send("pong");
 });
 
+const transport = new StreamableHTTPServerTransport({
+  sessionIdGenerator: undefined,
+  enableJsonResponse: true,
+});
+
+server.connect(transport);
+
 async function handleMcpRequest(req: Request, res: Response) {
   logRequest(req.body?.method || "unknown", req.body?.params);
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  });
-  await server.connect(transport);
   await transport.handleRequest(req, res, req.body);
 }
 
 app.post("/mcp", handleMcpRequest);
-app.post("/sse", handleMcpRequest);
 
 // ============================================================================
 // Start Server
