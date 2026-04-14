@@ -8,4 +8,4 @@ build:
 
 startCommand:
   type: sse
-  command: node build/index.js
+  command: node ./dist/index.js
