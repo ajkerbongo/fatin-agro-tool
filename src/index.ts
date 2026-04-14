@@ -225,6 +225,142 @@ app.use(express.json());
 
 let transport: SSEServerTransport | null = null;
 
+app.get("/", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${SERVER_NAME} - MCP Server</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+      <style>
+        :root {
+          --primary: #4ade80;
+          --secondary: #22c55e;
+          --bg: #0f172a;
+          --card: rgba(30, 41, 59, 0.7);
+          --text: #f8fafc;
+          --text-dim: #94a3b8;
+        }
+        body {
+          margin: 0;
+          font-family: 'Outfit', sans-serif;
+          background: var(--bg);
+          color: var(--text);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          overflow: hidden;
+        }
+        .container {
+          position: relative;
+          z-index: 10;
+          background: var(--card);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 3rem;
+          border-radius: 2rem;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+          max-width: 500px;
+          text-align: center;
+          animation: fadeIn 0.8s ease-out;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        h1 {
+          font-size: 2.5rem;
+          margin-bottom: 0.5rem;
+          background: linear-gradient(to right, var(--primary), var(--secondary));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+        .status {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          background: rgba(74, 222, 128, 0.1);
+          color: var(--primary);
+          padding: 0.5rem 1rem;
+          border-radius: 9999px;
+          font-size: 0.875rem;
+          font-weight: 600;
+          margin-bottom: 2rem;
+        }
+        .status::before {
+          content: '';
+          width: 8px;
+          height: 8px;
+          background: var(--primary);
+          border-radius: 50%;
+          box-shadow: 0 0 10px var(--primary);
+          animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+          0% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.5); opacity: 0.5; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        p {
+          color: var(--text-dim);
+          line-height: 1.6;
+          margin-bottom: 2rem;
+        }
+        .endpoint-box {
+          background: rgba(15, 23, 42, 0.5);
+          padding: 1rem;
+          border-radius: 1rem;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          text-align: left;
+        }
+        .endpoint-box label {
+          display: block;
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          color: var(--text-dim);
+          margin-bottom: 0.5rem;
+          letter-spacing: 0.05em;
+        }
+        .endpoint-box code {
+          color: var(--primary);
+          font-family: 'Monaco', 'Consolas', monospace;
+          font-size: 0.9rem;
+        }
+        .bg-glow {
+          position: absolute;
+          width: 400px;
+          height: 400px;
+          background: radial-gradient(circle, rgba(74, 222, 128, 0.15) 0%, rgba(34, 197, 94, 0) 70%);
+          z-index: 1;
+          pointer-events: none;
+        }
+        .glow-1 { top: -100px; right: -100px; }
+        .glow-2 { bottom: -100px; left: -100px; }
+      </style>
+    </head>
+    <body>
+      <div class="bg-glow glow-1"></div>
+      <div class="bg-glow glow-2"></div>
+      <div class="container">
+        <div class="status">SERVER ONLINE</div>
+        <h1>${SERVER_NAME}</h1>
+        <p>A specialized Model Context Protocol (MCP) server providing global agricultural expertise, disease detection, and treatment recommendations.</p>
+        
+        <div class="endpoint-box">
+          <label>SSE Connection URL</label>
+          <code>https://\${req.get('host')}/sse</code>
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
 app.get("/sse", async (req, res) => {
   transport = new SSEServerTransport("/messages", res);
   await server.connect(transport);
