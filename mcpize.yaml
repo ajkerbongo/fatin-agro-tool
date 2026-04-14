@@ -1,5 +1,11 @@
 version: 1
-runtime: container
+runtime: typescript
+entry: src/index.ts
 
-configSchema:
-  source: code
+build:
+  install: npm ci
+  command: npm run build
+
+startCommand:
+  type: sse
+  command: node build/index.js
