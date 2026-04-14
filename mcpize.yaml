@@ -1,4 +1,6 @@
 version: 1
+name: fatin-agro-tool
+description: Global Agriculture Expert MCP Server with Disease Detection
 runtime: typescript
 entry: src/index.ts
 
@@ -9,3 +11,6 @@ build:
 startCommand:
   type: http
   command: node ./dist/index.js
+
+
+
