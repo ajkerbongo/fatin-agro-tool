@@ -8,7 +8,7 @@ build:
 
 startCommand:
   type: http
-  command: node dist/index.js
+  command: node ./build/index.js
 
 configSchema:
   source: code

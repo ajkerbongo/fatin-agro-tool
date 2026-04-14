@@ -249,7 +249,7 @@ app.post("/mcp", async (req, res) => {
 // Start Server
 // ============================================================================
 
-const port = parseInt(process.env.PORT || "3000");
+const port = parseInt(process.env.PORT || "8080");
 const httpServer = app.listen(port, async () => {
   console.log(chalk.bold("\n[Agro] Server running on"), chalk.cyan(`http://localhost:${port}`));
   console.log(`  ${chalk.gray("Global Agro Knowledge Base initialized.")}`);

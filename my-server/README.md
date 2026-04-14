@@ -1,4 +1,4 @@
-# my-server
+# Fatin Agro Tool
 
 [![MCPize](https://mcpize.com/badge/@mcpize/mcpize?type=hosted)](https://mcpize.com)
 
