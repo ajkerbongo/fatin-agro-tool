@@ -87,11 +87,10 @@ const server = new McpServer({
 });
 
 // Resources
-server.resource(
+server.registerResource(
   "knowledge-base",
   "global-agro://knowledge-base",
   {
-    title: "Agro Knowledge Base",
     description: "Detailed best practices for global farmers",
     mimeType: "text/markdown",
   },
@@ -104,21 +103,25 @@ server.resource(
 );
 
 // Tools
-server.tool(
+server.registerTool(
   "list_supported_crops",
-  "Lists all supported crops and common diseases.",
-  {},
+  {
+    description: "Lists all supported crops and common diseases.",
+    inputSchema: {},
+  },
   async () => ({
     content: [{ type: "text", text: JSON.stringify(SUPPORTED_CROPS, null, 2) }],
     structuredContent: SUPPORTED_CROPS
   })
 );
 
-server.tool(
+server.registerTool(
   "detect_crop_disease",
-  "Analyzes a leaf image (base64) using TensorFlow.js and identifying the crop/disease.",
   {
-    image_base64: z.string().describe("Base64 string of leaf image."),
+    description: "Analyzes a leaf image (base64) using TensorFlow.js and identifying the crop/disease.",
+    inputSchema: {
+      image_base64: z.string().describe("Base64 string of leaf image."),
+    },
   },
   async ({ image_base64 }) => {
     const buffer = Buffer.from(image_base64, "base64");
@@ -176,13 +179,15 @@ server.tool(
   }
 );
 
-server.tool(
+server.registerTool(
   "recommend_treatment",
-  "Provides practical, organic, and low-cost agricultural advice.",
   {
-    crop: z.string().describe("Name of the crop (e.g. Tomato, Potato, Apple)"),
-    disease: z.string().describe("Detected disease name"),
-    location: z.string().optional().describe("Optional geographic location for region-specific advice"),
+    description: "Provides practical, organic, and low-cost agricultural advice.",
+    inputSchema: {
+      crop: z.string().describe("Name of the crop (e.g. Tomato, Potato, Apple)"),
+      disease: z.string().describe("Detected disease name"),
+      location: z.string().optional().describe("Optional geographic location for region-specific advice"),
+    },
   },
   async ({ crop, disease, location }) => {
     let organic = "Apply Neem oil solution (1-2 tsp per liter of water) or use a baking soda solution (1 tsp per liter) for fungal issues.";
