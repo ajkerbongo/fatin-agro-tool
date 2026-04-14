@@ -239,7 +239,7 @@ app.get("/ping", (_req, res) => {
   res.status(200).send("pong");
 });
 
-app.post("/sse", async (req, res) => {
+async function handleMcpRequest(req: Request, res: Response) {
   logRequest(req.body?.method || "unknown", req.body?.params);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -247,7 +247,10 @@ app.post("/sse", async (req, res) => {
   });
   await server.connect(transport);
   await transport.handleRequest(req, res, req.body);
-});
+}
+
+app.post("/mcp", handleMcpRequest);
+app.post("/sse", handleMcpRequest);
 
 // ============================================================================
 // Start Server
