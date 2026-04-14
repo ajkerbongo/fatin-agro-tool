@@ -1,26 +1,33 @@
 {
-  "name": "fatin-agro-tool",
+  "name": "fatin-agro-v1",
   "version": "1.0.0",
-  "description": "Global Agro Tool designed to help farmers worldwide with crop disease detection and treatment recommendations.",
-  "main": "build/index.js",
+  "description": "MCP server created with MCPize",
   "type": "module",
+  "main": "build/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
-    "dev": "tsc --watch"
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@modelcontextprotocol/sdk": "^1.23.0",
     "@tensorflow/tfjs": "^4.22.0",
+    "chalk": "^5.4.1",
     "cors": "^2.8.5",
-    "express": "^4.18.2",
+    "express": "^5.1.0",
     "jimp": "^1.6.1",
-    "zod": "^3.22.4"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.11.24",
-    "typescript": "^5.3.3"
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.15.21",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

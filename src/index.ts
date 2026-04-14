@@ -1,23 +1,16 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import {
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-  ErrorCode,
-  McpError,
-} from "@modelcontextprotocol/sdk/types.js";
-import express from "express";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import express, { Request, Response } from "express";
 import cors from "cors";
 import { z } from "zod";
+import chalk from "chalk";
 import * as tf from "@tensorflow/tfjs";
 import { Jimp } from "jimp";
 import fs from "fs";
 import path from "path";
 
 /**
- * Fatin Agro Tool: Global Agriculture Expert
+ * Fatin Agro Tool: Global Agriculture Expert (MCPize Edition)
  */
 
 const SERVER_NAME = "Fatin Agro Tool";
@@ -40,15 +33,15 @@ let model: tf.LayersModel | null = null;
 
 async function loadModel() {
   try {
-    const fullPath = path.resolve("./model/model.json");
+    const fullPath = path.resolve("../model/model.json");
     if (fs.existsSync(fullPath)) {
       model = await tf.loadLayersModel(`file://${fullPath}`);
-      console.log("[MCP] Model loaded successfully from local storage.");
+      console.log(chalk.green("[MCP] Model loaded successfully from local storage."));
     } else {
-      console.warn("[MCP] model/model.json not found. The tool will simulate detection until model files are provided.");
+      console.warn(chalk.yellow("[MCP] model/model.json not found. The tool will simulate detection until model files are provided."));
     }
   } catch (error) {
-    console.error("[MCP] Error loading model:", error);
+    console.error(chalk.red("[MCP] Error loading model:"), error);
   }
 }
 
@@ -63,169 +56,155 @@ const SUPPORTED_CROPS = {
 
 const KNOWLEDGE_BASE_CONTENT = `
 # Global Agriculture Knowledge Base
-... [Detailed best practices for global farmers] ...
 1. Soil Health First.
 2. Low-cost organic pest control.
 3. Proper water management.
 `;
 
-const server = new Server(
-  { name: SERVER_NAME, version: SERVER_VERSION },
-  { capabilities: { resources: {}, tools: {} } }
-);
+// ============================================================================
+// Dev Logging Utilities
+// ============================================================================
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    {
-      name: "list_supported_crops",
-      description: "Lists all supported crops and common diseases.",
-      inputSchema: { type: "object", properties: {} },
-    },
-    {
-      name: "detect_crop_disease",
-      description: "Analyzes a leaf image (base64) using TensorFlow.js and identifying the crop/disease.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          image_base64: { type: "string", description: "Base64 string of leaf image." },
-        },
-        required: ["image_base64"],
-      },
-    },
-    {
-      name: "recommend_treatment",
-      description: "Provides practical, organic, and low-cost agricultural advice.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          crop: { type: "string" },
-          disease: { type: "string" },
-          location: { type: "string", optional: true },
-        },
-        required: ["crop", "disease"],
-      },
-    },
-  ],
-}));
+const isDev = process.env.NODE_ENV !== "production";
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+function timestamp(): string {
+  return new Date().toLocaleTimeString("en-US", { hour12: false });
+}
 
-  switch (name) {
-    case "list_supported_crops":
-      return { content: [{ type: "text", text: JSON.stringify(SUPPORTED_CROPS, null, 2) }] };
+function logRequest(method: string, params?: unknown): void {
+  if (!isDev) return;
+  const paramsStr = params ? chalk.gray(` ${JSON.stringify(params).slice(0, 100)}`) : "";
+  console.log(`${chalk.gray(`[${timestamp()}]`)} ${chalk.cyan("→")} ${method}${paramsStr}`);
+}
 
-    case "detect_crop_disease": {
-      const { image_base64 } = z.object({ image_base64: z.string() }).parse(args);
-      const buffer = Buffer.from(image_base64, "base64");
+// ============================================================================
+// MCP Server Setup
+// ============================================================================
 
-      if (!model) {
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              crop: "Simulator",
-              disease: "Healthy Leaf (Simulation)",
-              confidence: 0.99,
-              note: "Architecture is READY. To enable real detection: 1. Place 'model.json' and '.bin' weights in /model folder. 2. Ensure they match PlantVillage labels."
-            }, null, 2)
-          }]
-        };
-      }
-
-      // Process image using Jimp (Pure JS)
-      const image = await Jimp.read(buffer);
-      image.cover({ w: 224, h: 224 });
-      
-      const floatData = new Float32Array(224 * 224 * 3);
-      image.scan(0, 0, 224, 224, (x, y, idx) => {
-        const pixelIdx = (y * 224 + x) * 3;
-        floatData[pixelIdx] = image.bitmap.data[idx] / 255;
-        floatData[pixelIdx + 1] = image.bitmap.data[idx + 1] / 255;
-        floatData[pixelIdx + 2] = image.bitmap.data[idx + 2] / 255;
-      });
-
-      const tensor = tf.tensor3d(floatData, [224, 224, 3]).expandDims();
-      const prediction = model.predict(tensor) as tf.Tensor;
-      const scores = await prediction.data();
-      const maxIndex = scores.indexOf(Math.max(...scores));
-      
-      const label = LABELS[maxIndex] || "Unknown Crop/Disease";
-      const [crop, disease] = label.includes("___") ? label.split("___") : [label, "Unknown"];
-
-      return {
-        content: [{
-          type: "text",
-          text: JSON.stringify({
-            crop: crop.replace(/_/g, " "),
-            disease: disease.replace(/_/g, " "),
-            confidence: scores[maxIndex],
-            status: "Real Inference"
-          }, null, 2)
-        }]
-      };
-    }
-
-    case "recommend_treatment": {
-      const { crop, disease, location } = z.object({
-        crop: z.string(),
-        disease: z.string(),
-        location: z.string().optional()
-      }).parse(args);
-
-      let organic = "Apply Neem oil solution (1-2 tsp per liter of water) or use a baking soda solution (1 tsp per liter) for fungal issues.";
-      let preventive = "Rotate crops every 3 years. Ensure proper drainage and avoid watering leaves directly.";
-
-      if (disease.toLowerCase().includes("blight")) {
-        organic = "Remove and bury/burn infected material immediately. Use copper-based sprays (organic approved) as a last resort.";
-      }
-
-      return {
-        content: [{
-          type: "text",
-          text: JSON.stringify({
-            recommendation: `Treatment for ${disease} in ${crop} at ${location || 'Global Location'}.`,
-            measures: organic,
-            prevention: preventive,
-            legal_disclaimer: "Always check local agricultural regulations before applying treatments."
-          }, null, 2)
-        }]
-      };
-    }
-
-    default:
-      throw new McpError(ErrorCode.MethodNotFound, "Tool not found");
-  }
+const server = new McpServer({
+  name: SERVER_NAME,
+  version: SERVER_VERSION,
 });
 
-server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-  resources: [{
-    uri: "global-agro://knowledge-base",
-    name: "Agro Knowledge Base",
-    mimeType: "text/markdown"
-  }]
-}));
+// Resources
+server.resource(
+  "knowledge-base",
+  "global-agro://knowledge-base",
+  {
+    title: "Agro Knowledge Base",
+    description: "Detailed best practices for global farmers",
+    mimeType: "text/markdown",
+  },
+  async () => ({
+    contents: [{
+      uri: "global-agro://knowledge-base",
+      text: KNOWLEDGE_BASE_CONTENT,
+    }],
+  })
+);
 
-server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
-  if (req.params.uri === "global-agro://knowledge-base") {
+// Tools
+server.tool(
+  "list_supported_crops",
+  "Lists all supported crops and common diseases.",
+  {},
+  async () => ({
+    content: [{ type: "text", text: JSON.stringify(SUPPORTED_CROPS, null, 2) }]
+  })
+);
+
+server.tool(
+  "detect_crop_disease",
+  "Analyzes a leaf image (base64) using TensorFlow.js and identifying the crop/disease.",
+  {
+    image_base64: z.string().describe("Base64 string of leaf image."),
+  },
+  async ({ image_base64 }) => {
+    const buffer = Buffer.from(image_base64, "base64");
+    if (!model) {
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            crop: "Simulator",
+            disease: "Healthy Leaf (Simulation)",
+            confidence: 0.99,
+            note: "Real Inference ready. Place model files in /model folder."
+          }, null, 2)
+        }]
+      };
+    }
+
+    const image = await Jimp.read(buffer as any);
+    image.cover({ w: 224, h: 224 });
+    const floatData = new Float32Array(224 * 224 * 3);
+    image.scan(0, 0, 224, 224, (x, y, idx) => {
+      const pixelIdx = (y * 224 + x) * 3;
+      floatData[pixelIdx] = image.bitmap.data[idx] / 255;
+      floatData[pixelIdx + 1] = image.bitmap.data[idx + 1] / 255;
+      floatData[pixelIdx + 2] = image.bitmap.data[idx + 2] / 255;
+    });
+
+    const tensor = tf.tensor3d(floatData, [224, 224, 3]).expandDims();
+    const prediction = model.predict(tensor) as tf.Tensor;
+    const scores = await prediction.data();
+    const maxIndex = scores.indexOf(Math.max(...scores));
+    const label = LABELS[maxIndex] || "Unknown Crop/Disease";
+    const [crop, disease] = label.includes("___") ? label.split("___") : [label, "Unknown"];
+
     return {
-      contents: [{
-        uri: req.params.uri,
-        mimeType: "text/markdown",
-        text: KNOWLEDGE_BASE_CONTENT
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          crop: crop.replace(/_/g, " "),
+          disease: disease.replace(/_/g, " "),
+          confidence: scores[maxIndex],
+          status: "Real Inference"
+        }, null, 2)
       }]
     };
   }
-  throw new McpError(ErrorCode.InvalidRequest, "Resource not found");
-});
+);
+
+server.tool(
+  "recommend_treatment",
+  "Provides practical, organic, and low-cost agricultural advice.",
+  {
+    crop: z.string(),
+    disease: z.string(),
+    location: z.string().optional(),
+  },
+  async ({ crop, disease, location }) => {
+    let organic = "Apply Neem oil solution (1-2 tsp per liter of water) or use a baking soda solution (1 tsp per liter) for fungal issues.";
+    let preventive = "Rotate crops every 3 years. Ensure proper drainage and avoid watering leaves directly.";
+
+    if (disease.toLowerCase().includes("blight")) {
+      organic = "Remove and bury/burn infected material immediately. Use copper-based sprays (organic approved) as a last resort.";
+    }
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          recommendation: `Treatment for ${disease} in ${crop} at ${location || 'Global Location'}.`,
+          measures: organic,
+          prevention: preventive,
+        }, null, 2)
+      }]
+    };
+  }
+);
+
+// ============================================================================
+// Express App Setup
+// ============================================================================
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Main Landing Page
+// Landing Page for Visual Feedback
 app.get("/", (req, res) => {
-  console.log("[Agro] Root route accessed");
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
@@ -233,149 +212,54 @@ app.get("/", (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${SERVER_NAME} - MCP Server</title>
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
       <style>
-        :root {
-          --primary: #4ade80;
-          --secondary: #22c55e;
-          --bg: #0f172a;
-          --card: rgba(30, 41, 59, 0.7);
-          --text: #f8fafc;
-          --text-dim: #94a3b8;
-        }
-        body {
-          margin: 0;
-          font-family: 'Outfit', sans-serif;
-          background: var(--bg);
-          color: var(--text);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 100vh;
-          overflow: hidden;
-        }
-        .container {
-          position: relative;
-          z-index: 10;
-          background: var(--card);
-          backdrop-filter: blur(12px);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          padding: 3rem;
-          border-radius: 2rem;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-          max-width: 500px;
-          text-align: center;
-          animation: fadeIn 0.8s ease-out;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        h1 {
-          font-size: 2.5rem;
-          margin-bottom: 0.5rem;
-          background: linear-gradient(to right, var(--primary), var(--secondary));
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-        .status {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          background: rgba(74, 222, 128, 0.1);
-          color: var(--primary);
-          padding: 0.5rem 1rem;
-          border-radius: 9999px;
-          font-size: 0.875rem;
-          font-weight: 600;
-          margin-bottom: 2rem;
-        }
-        .status::before {
-          content: '';
-          width: 8px;
-          height: 8px;
-          background: var(--primary);
-          border-radius: 50%;
-          box-shadow: 0 0 10px var(--primary);
-          animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-          0% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.5); opacity: 0.5; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        p {
-          color: var(--text-dim);
-          line-height: 1.6;
-          margin-bottom: 2rem;
-        }
-        .endpoint-box {
-          background: rgba(15, 23, 42, 0.5);
-          padding: 1rem;
-          border-radius: 1rem;
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          text-align: left;
-        }
-        .endpoint-box label {
-          display: block;
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          color: var(--text-dim);
-          margin-bottom: 0.5rem;
-          letter-spacing: 0.05em;
-        }
-        .endpoint-box code {
-          color: var(--primary);
-          font-family: 'Monaco', 'Consolas', monospace;
-          font-size: 0.9rem;
-        }
-        .bg-glow {
-          position: absolute;
-          width: 400px;
-          height: 400px;
-          background: radial-gradient(circle, rgba(74, 222, 128, 0.15) 0%, rgba(34, 197, 94, 0) 70%);
-          z-index: 1;
-          pointer-events: none;
-        }
-        .glow-1 { top: -100px; right: -100px; }
-        .glow-2 { bottom: -100px; left: -100px; }
+        body { font-family: sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .card { background: rgba(30, 41, 59, 0.7); padding: 3rem; border-radius: 2rem; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1); }
+        h1 { color: #4ade80; }
+        .status { color: #4ade80; font-weight: bold; margin-bottom: 1rem; }
       </style>
     </head>
     <body>
-      <div class="bg-glow glow-1"></div>
-      <div class="bg-glow glow-2"></div>
-      <div class="container">
-        <div class="status">SERVER ONLINE</div>
+      <div class="card">
+        <div class="status">● MCP SERVER ONLINE</div>
         <h1>${SERVER_NAME}</h1>
-        <p>A specialized Model Context Protocol (MCP) server providing global agricultural expertise, disease detection, and treatment recommendations.</p>
-        
-        <div class="endpoint-box">
-          <label>SSE Connection URL</label>
-          <code>https://${req.get('host')}/sse</code>
-        </div>
+        <p>Global Agricultural Expertise & Disease Detection</p>
+        <p>Endpoint: <code>/mcp</code></p>
       </div>
     </body>
     </html>
   `);
 });
 
-let transport: SSEServerTransport | null = null;
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "healthy" });
+});
 
+app.get("/ping", (_req, res) => {
+  res.status(200).send("pong");
+});
 
-app.get("/sse", async (req, res) => {
-  transport = new SSEServerTransport("/messages", res);
+app.post("/mcp", async (req, res) => {
+  logRequest(req.body?.method || "unknown", req.body?.params);
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
   await server.connect(transport);
+  await transport.handleRequest(req, res, req.body);
 });
 
-app.post("/messages", async (req, res) => {
-  if (!transport) return res.status(400).send("No channel");
-  await transport.handlePostMessage(req, res);
-});
+// ============================================================================
+// Start Server
+// ============================================================================
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-  console.log(`[Agro] Running on http://localhost:${PORT}/sse`);
+const port = parseInt(process.env.PORT || "8080");
+const httpServer = app.listen(port, "0.0.0.0", async () => {
+  console.log(chalk.bold("\n[Agro] Server running on"), chalk.cyan(`http://localhost:${port}`));
+  console.log(`  ${chalk.gray("Global Agro Knowledge Base initialized.")}`);
   await loadModel();
+});
+
+process.on("SIGTERM", () => {
+  httpServer.close(() => process.exit(0));
 });
