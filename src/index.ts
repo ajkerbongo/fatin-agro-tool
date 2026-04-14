@@ -223,9 +223,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let transport: SSEServerTransport | null = null;
-
+// Main Landing Page
 app.get("/", (req, res) => {
+  console.log("[Agro] Root route accessed");
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
@@ -353,13 +353,16 @@ app.get("/", (req, res) => {
         
         <div class="endpoint-box">
           <label>SSE Connection URL</label>
-          <code>https://\${req.get('host')}/sse</code>
+          <code>https://${req.get('host')}/sse</code>
         </div>
       </div>
     </body>
     </html>
   `);
 });
+
+let transport: SSEServerTransport | null = null;
+
 
 app.get("/sse", async (req, res) => {
   transport = new SSEServerTransport("/messages", res);
