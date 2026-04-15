@@ -264,12 +264,15 @@ const transport = new StreamableHTTPServerTransport({
 
 server.connect(transport);
 
-async function handleMcpRequest(req: Request, res: Response) {
-  logRequest(req.body?.method || "unknown", req.body?.params);
-  await transport.handleRequest(req, res, req.body);
-}
-
-app.post("/mcp", handleMcpRequest);
+app.post("/mcp", async (req: Request, res: Response) => {
+  try {
+    logRequest(req.body?.method || "unknown", req.body?.params);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error("[MCP ERROR]", error);
+    res.status(500).json({ error: "Handler failed", message: (error as Error).message });
+  }
+});
 
 // ============================================================================
 // Start Server
