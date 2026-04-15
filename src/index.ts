@@ -108,7 +108,9 @@ server.registerTool(
   "list_supported_crops",
   {
     description: "Lists all supported crops and common diseases.",
-    inputSchema: z.object({}),
+    inputSchema: z.object({
+      filter: z.string().optional().describe("Optional filter keyword (leave blank to get all)"),
+    }),
   },
   async () => ({
     content: [{ type: "text", text: JSON.stringify(SUPPORTED_CROPS, null, 2) }],
