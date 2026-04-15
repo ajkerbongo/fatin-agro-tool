@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express, { Request, Response } from "express";
 import cors from "cors";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import chalk from "chalk";
 import * as tf from "@tensorflow/tfjs";
@@ -258,7 +259,7 @@ app.get("/ping", (_req, res) => {
 });
 
 const transport = new StreamableHTTPServerTransport({
-  sessionIdGenerator: undefined,
+  sessionIdGenerator: () => randomUUID(),
   enableJsonResponse: true,
 });
 
@@ -269,8 +270,8 @@ app.post("/mcp", async (req: Request, res: Response) => {
     logRequest(req.body?.method || "unknown", req.body?.params);
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
-    console.error("[MCP ERROR]", error);
-    res.status(500).json({ error: "Handler failed", message: (error as Error).message });
+    console.error("[MCP ERROR]", error, req.body);
+    res.status(500).json({ error: "Handler failed", message: String(error) });
   }
 });
 
