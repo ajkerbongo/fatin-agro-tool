@@ -221,7 +221,12 @@ server.registerTool(
 // ============================================================================
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "Mcp-Session-Id"],
+  exposedHeaders: ["Mcp-Session-Id"]
+}));
 app.use(express.json());
 
 // Landing Page for Visual Feedback
@@ -267,12 +272,21 @@ const transport = new StreamableHTTPServerTransport({
 
 server.connect(transport);
 
+app.get("/mcp", async (req: Request, res: Response) => {
+  try {
+    await transport.handleRequest(req, res);
+  } catch (error) {
+    console.error("[MCP GET ERROR]", error);
+    res.status(500).send("Handshake failed");
+  }
+});
+
 app.post("/mcp", async (req: Request, res: Response) => {
   try {
     logRequest(req.body?.method || "unknown", req.body?.params);
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
-    console.error("[MCP ERROR]", error, req.body);
+    console.error("[MCP POST ERROR]", error, req.body);
     res.status(500).json({ error: "Handler failed", message: String(error) });
   }
 });
